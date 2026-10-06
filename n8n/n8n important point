@@ -1,0 +1,69 @@
+Use **POST**, `Content-Type: application/json`, raw JSON.
+
+**Test URL** (Execute workflow first):  
+`https://n8n.chefhome.in/webhook-test/day4-qualify`
+
+**Live URL** (workflow Active):  
+`https://n8n.chefhome.in/webhook/day4-qualify`
+
+Emails/names are unique so Salesforce is less likely to duplicate-block.
+
+---
+
+## IF True — Urgent Lead
+
+```json
+{
+  "firstName": "Riley",
+  "lastName": "ChenUrgent401",
+  "email": "riley.chen.urgent.401@demo.example",
+  "company": "Acme Org Farm",
+  "message": "Salesforce production is down after a failed deployment. Opportunity pages return 500 errors, we cannot rollback, security team is on the thread, and we need a human immediately."
+}
+```
+
+Expect: `route_to_human: true` → **Salesforce Urgent Lead** → Description `URGENT —`
+
+---
+
+## ELSE False — Nurture Lead
+
+```json
+{
+  "firstName": "Morgan",
+  "lastName": "LeeNurture401",
+  "email": "morgan.lee.nurture.401@demo.example",
+  "company": "Globex Enablement",
+  "message": "We are researching Salesforce release management best practices for a possible project next quarter. No outage, no deadline, not urgent. Please send a guide and add us to the nurture list."
+}
+```
+
+Expect: `route_to_human: false` → **Salesforce Nurture Lead** → Description `Nurture —`
+
+---
+
+Run them **one at a time**. After each send, check Parse AI Reply then Recently Viewed Leads:
+
+`https://orgfarm-ceb9ab7a86-dev-ed.develop.my.salesforce.com/lightning/o/Lead/list?filterName=Recent`
+
+
+
+Quick Testing Checklist in Postman:
+Click Test workflow in n8n.
+Send Payload 1 from Postman ➔ Verify it lights up the Salesforce Urgent Lead node green.
+Click Test workflow in n8n again.
+Send Payload 2 from Postman ➔ Verify it lights up the Salesforce Nurture Lead node green.
+Open your Salesforce Today's Leads View to see both new records created side-by-side:
+👉 View Today's Leads in Salesforce
+`https://orgfarm-ceb9ab7a86-dev-ed.develop.my.salesforce.com/lightning/o/Lead/list?filterName=TodaysLeads`
+
+
+7:40–8:30 | Salesforce UI
+Open:
+https://orgfarm-ceb9ab7a86-dev-ed.develop.my.salesforce.com/lightning/o/Lead/list?filterName=Recent
+
+Say:
+“Two demo Leads. Riley Description starts with URGENT. Morgan with Nurture. These are test records only.”
+
+Open one Lead via /lightning/r/Lead/{id}/view from the HTTP output id.
+

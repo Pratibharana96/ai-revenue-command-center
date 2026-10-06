@@ -1,0 +1,478 @@
+{
+  "name": "AI Revenue Command Center - Lead Qualification (n8n)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## AI Revenue Command Center - Inbound Lead Qualification\nWebhook -> LLM qualification (structured JSON) -> human/nurture routing -> Salesforce Lead -> Supabase analytics log.\n\n**Real vs simulated:** the LLM calls and the Salesforce/Supabase writes are real. Inbound leads and the `outcome` column are simulated test data.",
+        "height": 160,
+        "width": 1790,
+        "color": 7
+      },
+      "id": "n-overview",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1090,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 1. Ingest & prompt\nReceives the lead (company_name, contact_name, pain_point) and builds a strict JSON-only prompt.",
+        "height": 220,
+        "width": 520,
+        "color": 4
+      },
+      "id": "n-s1",
+      "name": "Stage 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1090,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 2. AI qualification\nLLM returns fit_score (1-10), urgency, route_to_human. Parser strips markdown, validates, and falls back safely if the JSON is malformed.\nAPI key lives in an n8n credential, never in the workflow.",
+        "height": 220,
+        "width": 400,
+        "color": 5
+      },
+      "id": "n-s2",
+      "name": "Stage 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -570,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3. Route\nTrue = needs a human now. False = nurture sequence.",
+        "height": 220,
+        "width": 290,
+        "color": 6
+      },
+      "id": "n-s3",
+      "name": "Stage 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -170,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 4. CRM write\nCreates a Salesforce Lead with the AI verdict in Description. Retries 3x on failure.",
+        "height": 480,
+        "width": 240,
+        "color": 3
+      },
+      "id": "n-s4",
+      "name": "Stage 4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        190,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 5. Analytics log\nWrites one row per lead to Supabase `lead_events` for the funnel SQL queries (route volume, conversion, fit score by outcome).",
+        "height": 480,
+        "width": 240,
+        "color": 2
+      },
+      "id": "n-s5",
+      "name": "Stage 5",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        460,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "day4-qualify",
+        "options": {}
+      },
+      "id": "311a92ea-5cc3-4818-a962-13e507472a2f",
+      "name": "Webhook - Inbound Lead",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1040,
+        128
+      ],
+      "webhookId": "day4-qualify"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $json.body || $json;\n\nconst nvidiaBody = {\n  model: 'nvidia/nemotron-3.5-lightning-30b-a3b',\n  messages: [\n    {\n      role: 'system',\n      content: 'You are an AI lead-qualification assistant for an enterprise Salesforce DevOps / release-governance vendor. Return ONLY valid JSON, no markdown. Use exactly these keys: fit_score (integer 1-10, how well this lead fits an enterprise Salesforce release/compliance buyer), route_to_human (boolean), urgency (one of: urgent, high, medium, low), pain_point (string), summary (one sentence), recommended_action (short phrase), confidence (number 0-1). Set route_to_human to true if the message describes a production outage, failed deployment, data loss, security issue, release blocker, audit/compliance pressure, or the person asks for immediate human help. Otherwise set it to false.'\n    },\n    {\n      role: 'user',\n      content: JSON.stringify(payload)\n    }\n  ],\n  temperature: 0.1,\n  top_p: 0.7,\n  max_tokens: 1024,\n  stream: false\n};\n\nreturn [{ json: nvidiaBody }];\n"
+      },
+      "id": "49f8c996-2cf0-4a02-b90a-2489648fccd2",
+      "name": "Build LLM Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -816,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, messages: $json.messages, temperature: 0.1, top_p: 0.7, max_tokens: 1024, stream: false }) }}",
+        "options": {}
+      },
+      "id": "13b930b1-b082-40c2-b88b-7c70e08a8fc0",
+      "name": "Qualify Lead (NVIDIA LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -560,
+        128
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "NVIDIA API Key"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const webhook = $('Webhook - Inbound Lead').item.json.body || $('Webhook - Inbound Lead').item.json;\nconst ai = $json;\n\n// 1. Extract the raw model text\nconst raw = ai.choices?.[0]?.message?.content ?? ai.content?.[0]?.text ?? ai.output ?? '';\nlet cleaned = String(raw).trim();\n\n// 2. Strip markdown fences and isolate the JSON object\ncleaned = cleaned.replace(/^```json\\s*/i, '').replace(/^```\\s*/, '').replace(/```$/, '').trim();\nconst first = cleaned.indexOf('{');\nconst last = cleaned.lastIndexOf('}');\nif (first !== -1 && last > first) cleaned = cleaned.slice(first, last + 1);\ncleaned = cleaned.replace(/[\\u0000-\\u001F\\u007F-\\u009F]/g, ' ');\n\n// 3. Parse, with a safe fallback so the workflow never crashes\nlet parsed = {};\nlet parseWarning = false;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parseWarning = true;\n  const routeMatch = /\"route_to_human\"\\s*:\\s*(true|\"true\"|1)/i.test(raw);\n  parsed = {\n    route_to_human: routeMatch,\n    urgency: routeMatch ? 'urgent' : 'low',\n    pain_point: 'JSON parse warning',\n    summary: 'Extracted via fallback parser',\n    recommended_action: 'Review payload manually',\n    confidence: 0.5\n  };\n}\n\n// 4. Coerce route_to_human into a real boolean\nlet routeBool = false;\nconst r = parsed.route_to_human;\nif (typeof r === 'boolean') routeBool = r;\nelse if (typeof r === 'string') routeBool = ['true', '1', 'yes', 'urgent'].includes(r.toLowerCase().trim());\nelse if (typeof r === 'number') routeBool = r === 1;\n\n// 5. fit_score: integer 1-10 (falls back to confidence x 10)\nlet fit = Math.round(Number(parsed.fit_score));\nif (!Number.isFinite(fit)) fit = Math.round(Number(parsed.confidence) * 10);\nif (!Number.isFinite(fit)) fit = 5;\nfit = Math.min(10, Math.max(1, fit));\n\n// 6. Normalize contact and company fields (Day 4 payloads use company_name / contact_name)\nconst fullName = String(webhook.contact_name || '').trim();\nconst parts = fullName ? fullName.split(/\\s+/) : [];\nconst firstName = webhook.firstName || (parts.length > 1 ? parts[0] : '');\nconst lastName = webhook.lastName || (parts.length > 1 ? parts.slice(1).join(' ') : (parts[0] || 'Lead'));\nconst company = webhook.company_name || webhook.company || 'Demo Company';\n\nreturn [{\n  json: {\n    ...webhook,\n    ...parsed,\n    route_to_human: routeBool,\n    route_decision: routeBool ? 'urgent' : 'nurture',\n    fit_score: fit,\n    firstName,\n    lastName,\n    company,\n    contact_name: fullName || (firstName + ' ' + lastName).trim(),\n    email: webhook.email || '',\n    parse_warning: parseWarning,\n    _raw_ai_response: raw\n  }\n}];\n"
+      },
+      "id": "aad47ba8-2642-411b-b131-3173748d4701",
+      "name": "Parse AI Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -304,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "route-to-human-true",
+              "leftValue": "={{ $json.route_to_human }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0d5a7af4-7571-4001-b301-f07eec9a59bb",
+      "name": "Route to Human?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -32,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://orgfarm-ceb9ab7a86-dev-ed.develop.my.salesforce.com/services/data/v59.0/sobjects/Lead",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "salesforceOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  FirstName: $json.firstName || undefined,\n  LastName: $json.lastName || 'Lead',\n  Company: $json.company || 'Demo Company',\n  Email: $json.email || undefined,\n  LeadSource: 'Web - AI Qualified (Demo)',\n  Description: 'URGENT - AI Qualification | Fit Score: ' + $json.fit_score + '/10 | ' + ($json.summary || '') + ' | Pain: ' + ($json.pain_point || '') + ' | Next action: ' + ($json.recommended_action || '') + ' | Confidence: ' + $json.confidence\n}) }}",
+        "options": {}
+      },
+      "id": "82a7aaae-50f8-48b4-90d9-2e4391a6c515",
+      "name": "Salesforce - Create Lead (Urgent)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        0
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "id": "O1C66rPBWb2UwZq9",
+          "name": "Salesforce account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://orgfarm-ceb9ab7a86-dev-ed.develop.my.salesforce.com/services/data/v59.0/sobjects/Lead",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "salesforceOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  FirstName: $json.firstName || undefined,\n  LastName: $json.lastName || 'Lead',\n  Company: $json.company || 'Demo Company',\n  Email: $json.email || undefined,\n  LeadSource: 'Web - AI Qualified (Demo)',\n  Description: 'Nurture - AI Qualification | Fit Score: ' + $json.fit_score + '/10 | ' + ($json.summary || '') + ' | Pain: ' + ($json.pain_point || '') + ' | Next action: ' + ($json.recommended_action || '') + ' | Confidence: ' + $json.confidence\n}) }}",
+        "options": {}
+      },
+      "id": "74792e8b-3ed8-434c-a661-4288e7c66199",
+      "name": "Salesforce - Create Lead (Nurture)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        240
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "id": "O1C66rPBWb2UwZq9",
+          "name": "Salesforce account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "tableId": "lead_events",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "company_name",
+              "fieldValue": "={{ $('Parse AI Reply').item.json.company }}"
+            },
+            {
+              "fieldId": "contact_name",
+              "fieldValue": "={{ $('Parse AI Reply').item.json.contact_name }}"
+            },
+            {
+              "fieldId": "fit_score",
+              "fieldValue": "={{ $('Parse AI Reply').item.json.fit_score }}"
+            },
+            {
+              "fieldId": "route_decision",
+              "fieldValue": "={{ $('Parse AI Reply').item.json.route_decision }}"
+            },
+            {
+              "fieldId": "outcome",
+              "fieldValue": "pending (simulated)"
+            },
+            {
+              "fieldId": "urgency",
+              "fieldValue": "={{ $('Parse AI Reply').item.json.urgency }}"
+            },
+            {
+              "fieldId": "email",
+              "fieldValue": "={{ $('Parse AI Reply').item.json.email }}"
+            }
+          ]
+        }
+      },
+      "id": "c63bfbfa-4e23-4cf9-a942-dc591177f78a",
+      "name": "Log to Supabase (Urgent)",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        500,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "VOiypVOehOQNjxbV",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "tableId": "lead_events",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "company_name",
+              "fieldValue": "={{ $('Parse AI Reply').item.json.company }}"
+            },
+            {
+              "fieldId": "contact_name",
+              "fieldValue": "={{ $('Parse AI Reply').item.json.contact_name }}"
+            },
+            {
+              "fieldId": "fit_score",
+              "fieldValue": "={{ $('Parse AI Reply').item.json.fit_score }}"
+            },
+            {
+              "fieldId": "route_decision",
+              "fieldValue": "={{ $('Parse AI Reply').item.json.route_decision }}"
+            },
+            {
+              "fieldId": "outcome",
+              "fieldValue": "pending (simulated)"
+            },
+            {
+              "fieldId": "urgency",
+              "fieldValue": "={{ $('Parse AI Reply').item.json.urgency }}"
+            },
+            {
+              "fieldId": "email",
+              "fieldValue": "={{ $('Parse AI Reply').item.json.email }}"
+            }
+          ]
+        }
+      },
+      "id": "2fa4c822-4108-438b-b118-aafb2d9d8480",
+      "name": "Log to Supabase (Nurture)",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        500,
+        240
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "VOiypVOehOQNjxbV",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - Inbound Lead": {
+      "main": [
+        [
+          {
+            "node": "Build LLM Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build LLM Prompt": {
+      "main": [
+        [
+          {
+            "node": "Qualify Lead (NVIDIA LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qualify Lead (NVIDIA LLM)": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Reply": {
+      "main": [
+        [
+          {
+            "node": "Route to Human?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to Human?": {
+      "main": [
+        [
+          {
+            "node": "Salesforce - Create Lead (Urgent)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Salesforce - Create Lead (Nurture)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salesforce - Create Lead (Urgent)": {
+      "main": [
+        [
+          {
+            "node": "Log to Supabase (Urgent)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salesforce - Create Lead (Nurture)": {
+      "main": [
+        [
+          {
+            "node": "Log to Supabase (Nurture)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "tags": []
+}

@@ -1,0 +1,200 @@
+{
+  "name": "Day 4 - AI Revenue Command Center NVIDIA",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "day4-qualify",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "day4-qualify"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_NVIDIA_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"meta/llama-3.3-70b-instruct\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an AI qualification assistant for Salesforce release pain points. Return ONLY valid JSON. No markdown. The JSON must have exactly these keys: route_to_human (boolean), urgency (one of: urgent, high, medium, low), pain_point (string), summary (string), recommended_action (string), confidence (number 0-1). Set route_to_human to true if the message describes a production outage, failed deployment, data loss, security issue, release blocker, or the person explicitly asks for immediate human help. Otherwise set route_to_human to false.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.body || $json) }}\n    }\n  ],\n  \"temperature\": 0.1,\n  \"top_p\": 0.7,\n  \"max_tokens\": 1024,\n  \"stream\": false\n}",
+        "options": {}
+      },
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "NVIDIA Qualify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const webhook = $('Webhook').item.json.body || $('Webhook').item.json;\n\nconst ai = $json;\nconst raw =\n  ai.choices?.[0]?.message?.content ??\n  ai.content?.[0]?.text ??\n  ai.output ??\n  '';\n\nlet cleaned = String(raw).trim();\n\ncleaned = cleaned\n  .replace(/^```json\\s*/i, '')\n  .replace(/^```\\s*/, '')\n  .replace(/```$/, '')\n  .trim();\n\nconst first = cleaned.indexOf('{');\nconst last = cleaned.lastIndexOf('}');\nif (first !== -1 && last !== -1 && last > first) {\n  cleaned = cleaned.slice(first, last + 1);\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = {\n    route_to_human: false,\n    urgency: 'low',\n    pain_point: 'parse_error',\n    summary: 'Could not parse AI response',\n    recommended_action: 'Review manually',\n    confidence: 0\n  };\n}\n\nif (typeof parsed.route_to_human === 'string') {\n  parsed.route_to_human = parsed.route_to_human.toLowerCase() === 'true';\n}\n\nif (typeof parsed.confidence !== 'number') {\n  parsed.confidence = Number(parsed.confidence) || 0;\n}\n\nreturn [{\n  json: {\n    ...webhook,\n    ...parsed,\n    _raw_ai_response: raw\n  }\n}];"
+      },
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "Parse AI Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "route-to-human-true",
+              "leftValue": "={{ $json.route_to_human }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444444",
+      "name": "IF route_to_human",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSTANCE.salesforce.com/services/data/v59.0/sobjects/Lead",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"FirstName\": \"{{ $json.firstName || 'Demo' }}\",\n  \"LastName\": \"{{ $json.lastName || 'Lead' }}\",\n  \"Company\": \"{{ $json.company || 'Demo Company' }}\",\n  \"Email\": \"{{ $json.email || '' }}\",\n  \"LeadSource\": \"Web - AI Qualified (Demo)\",\n  \"Description\": \"URGENT — AI Qualification: {{ $json.summary }} | Pain: {{ $json.pain_point }} | Recommended: {{ $json.recommended_action }} | Confidence: {{ $json.confidence }}\"\n}",
+        "options": {}
+      },
+      "id": "55555555-5555-5555-5555-555555555555",
+      "name": "Salesforce Urgent Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSTANCE.salesforce.com/services/data/v59.0/sobjects/Lead",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"FirstName\": \"{{ $json.firstName || 'Demo' }}\",\n  \"LastName\": \"{{ $json.lastName || 'Lead' }}\",\n  \"Company\": \"{{ $json.company || 'Demo Company' }}\",\n  \"Email\": \"{{ $json.email || '' }}\",\n  \"LeadSource\": \"Web - AI Qualified (Demo)\",\n  \"Description\": \"Nurture — AI Qualification: {{ $json.summary }} | Pain: {{ $json.pain_point }} | Recommended: {{ $json.recommended_action }} | Confidence: {{ $json.confidence }}\"\n}",
+        "options": {}
+      },
+      "id": "66666666-6666-6666-6666-666666666666",
+      "name": "Salesforce Nurture Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "NVIDIA Qualify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NVIDIA Qualify": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Reply": {
+      "main": [
+        [
+          {
+            "node": "IF route_to_human",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF route_to_human": {
+      "main": [
+        [
+          {
+            "node": "Salesforce Urgent Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Salesforce Nurture Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "active": false
+}

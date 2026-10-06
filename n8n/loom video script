@@ -1,0 +1,125 @@
+Here is a complete **Loom Video Script** designed to walk an interviewer or hiring manager through your AI Revenue Command Center workflow.
+
+---
+
+# 📹 Loom Recording Setup (Before You Press Record)
+
+### Screen Layout:
+1. **Tab 1:** Your **n8n Canvas** (`https://n8n.chefhome.in`) with all 6 nodes visible.
+2. **Tab 2:** **Postman** with your two test payloads ready.
+3. **Tab 3:** **Salesforce Today's Leads View** (`https://orgfarm-ceb9ab7a86-dev-ed.develop.my.salesforce.com/lightning/o/Lead/list?filterName=TodaysLeads`).
+
+* **Target Length:** 3 to 4 minutes.
+* **Tone:** Confident, architectural, and value-driven.
+
+---
+
+# 🎬 SCRIPT
+
+### Section 1: Introduction & Value Proposition (0:00 – 0:35)
+
+**[Action: Camera full screen or bottom-corner bubble over n8n Canvas]**
+
+> *"Hi everyone! Today I’m walking you through an enterprise **AI Revenue Command Center** that I engineered using **n8n**, **NVIDIA NIM microservices**, and **Salesforce**."*
+>
+> *"In a typical enterprise sales workflow, inbound form inquiries sit in a queue for hours before a human reviews them. If a customer is experiencing a critical production outage, every minute lost impacts revenue and churn."*
+>
+> *"To solve this, I built an automated end-to-end pipeline that captures incoming inbound form webhooks, leverages an open-source 70-billion parameter LLM hosted on NVIDIA to evaluate pain point severity, sanitizes and parses the AI verdict defensively, and dynamically routes the lead directly into Salesforce as either an **URGENT** priority escalation or a **NURTURE** record."*
+
+---
+
+### Section 2: Architecture & Node Walkthrough (0:35 – 2:00)
+
+**[Action: Zoom in on the n8n Canvas and highlight each node as you speak]**
+
+> *"Let’s look at the system architecture."*
+>
+> **1. Webhook Ingress:**  
+> *"First, we have an HTTP Webhook trigger. It acts as an asynchronous entry point for inbound form submissions, instantly returning a 200 OK response to prevent web form timeouts."*
+>
+> **2. NVIDIA NIM AI Call:**  
+> *"Next, the payload is sent to NVIDIA’s NIM API running `meta/llama-3.1-70b-instruct`. Instead of locked-in proprietary models like OpenAI or Claude, using NVIDIA NIM gives us open-source privacy compliance, zero data retention, and lower latency. We enforce a system prompt that mandates strict JSON output and run the model at a low temperature of 0.1 for deterministic classification."*
+>
+> **3. Defensive JavaScript Code Parser:**  
+> *"Node 3 is one of the most critical engineering steps: our Code Parser. LLMs are non-deterministic and can output markdown tags or invisible control characters that crash standard `JSON.parse()` calls. In this node, I wrote a multi-layered defense mechanism that strips markdown fences, removes ASCII control characters, applies regex fallback extraction, and performs strict type coercion on the `route_to_human` boolean. I also added a keyword override safeguard to catch critical terms like 'outage' or 'system down'."*
+>
+> **4. Decision Engine (IF Branch):**  
+> *"Node 4 evaluates `route_to_human`. To prevent type-mismatch bugs where a string `"true"` fails a strict boolean check, the condition sanitizes and casts the value before evaluating."*
+>
+> **5. Salesforce REST API Write Nodes:**  
+> *"Finally, Nodes 5 and 6 connect to Salesforce’s SObjects REST API using OAuth2 authentication via a Salesforce Connected App. Depending on the branch, it creates a Lead record with mapped fields and embeds the AI's full diagnostic reasoning—summary, pain point, and confidence score—directly into the Lead Description."*
+
+---
+
+### Section 3: Live End-to-End Demo (2:00 – 3:30)
+
+**[Action: Switch screen to Postman]**
+
+> *"Let’s see this live in action with two real-world scenarios."*
+
+#### Demo Scenario 1: Critical Production Emergency (True Branch)
+
+**[Action: Show Payload 1 in Postman]**
+```json
+{
+  "firstName": "Siddharth",
+  "lastName": "Sharma (Urgent)",
+  "email": "siddharth.sharma.urgent202@demo.example",
+  "company": "Apex Cloud Solutions",
+  "message": "CRITICAL EMERGENCY: Our live production integration crashed after a release update. Customer account records are failing to sync and throwing 500 API errors. Security team needs an engineer immediately."
+}
+```
+
+> *"First, I’ll send an urgent payload: Siddharth Sharma from Apex Cloud Solutions reporting a live production integration crash."*
+
+**[Action: Click 'Test workflow' in n8n, then click 'Send' in Postman]**
+
+> *"If we look at n8n, execution completes in under 2 seconds. Node 2 sends the prompt, Node 3 parses `route_to_human` as `true`, Node 4 branches to the top path, and Node 5 fires a `POST` request to Salesforce."*
+
+---
+
+#### Demo Scenario 2: Standard General Inquiry (False Branch)
+
+**[Action: Show Payload 2 in Postman]**
+```json
+{
+  "firstName": "Elena",
+  "lastName": "Rostova (Nurture)",
+  "email": "elena.rostova.nurture202@demo.example",
+  "company": "Vanguard Logistics",
+  "message": "Hello team, we are researching automation tools for next quarter. Could you send over whitepapers and standard pricing documentation? No hurry, just reviewing options for Q3."
+}
+```
+
+> *"Now let's test a non-urgent payload: Elena Rostova asking for product whitepapers and pricing for next quarter with 'no hurry'."*
+
+**[Action: Click 'Test workflow' in n8n, then click 'Send' in Postman]**
+
+> *"In n8n, the AI correctly identifies `route_to_human: false` and `urgency: low`. The IF node routes execution down the bottom path to the **Salesforce Nurture Lead** node."*
+
+---
+
+### Section 4: Verifying Salesforce & Closing (3:30 – 4:15)
+
+**[Action: Switch screen to Salesforce Today's Leads View and refresh]**
+
+> *"Now let's verify inside Salesforce."*
+>
+> **[Action: Click on Siddharth Sharma]**  
+> *"If we open Siddharth's record, under Details, the Lead Source is tagged as `Web - AI Qualified (Demo)` and the Description starts with `URGENT — AI Qualification:`, giving the on-call engineer immediate context."*
+>
+> **[Action: Click on Elena Rostova]**  
+> *"If we open Elena's record, the Description starts with `Nurture — AI Qualification:`, categorizing her record for marketing automation."*
+
+**[Action: Switch back to camera full screen or n8n Canvas]**
+
+> *"To summarize: this project demonstrates asynchronous webhook handling, AI model integration via NVIDIA NIM, defensive parsing against non-deterministic outputs, OAuth2 security configuration, and direct CRM REST API integration."*
+>
+> *"Thank you for watching! All source files, workflow JSON, and architecture docs are available in my GitHub repo."*
+
+---
+
+# 💡 Tips for Recording Your Loom:
+1. **Speak at a steady, upbeat pace.**
+2. **Use your mouse cursor to point** to the exact node or text line you are talking about.
+3. **If a test fails during recording:** Don't panic! Briefly explain *why* (e.g., duplicate email) and resend—interviewers love seeing real-time debugging!
